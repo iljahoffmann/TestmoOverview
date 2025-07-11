@@ -1,0 +1,8 @@
+pandas
+prompt-tool
+openpyxl
+beautifulsoup4
+tqdm
+requests
+pillow
+pyinstaller

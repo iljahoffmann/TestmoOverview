@@ -1,0 +1,50 @@
+{
+    "TESTMO_LOGIN_PAGE": {
+        "PATH": "https://murrelektronik.testmo.net/auth/login",
+        "EMAIL": "//input[@placeholder='Email']",
+        "PASSWORD": "//input[@placeholder='Password']",
+        "LOGIN_BUTTON": "//button[text()='Log in']"
+    },
+    "TESTMO_MAIN_PAGE": "https://murrelektronik.testmo.net",
+    "TESTMO_REPOSITORY_PAGE": {
+        "REPOSITORY": "//span[text()=' Repository']",
+        "EXPORT": "//button[@data-target='repositories--index.exportButton']",
+        "EXPORT_TO_CSV": "//div[text()='Export to CSV']",
+        "EXPORT_CSV_WINDOW": {
+            "WINDOW": "//div[@class='dialog__border']",
+            "Automation": "//tr[@data-column='repository_cases:has_automation']",
+            "column": "//div[@class='dialog__border']//th[@class='table__header__select']//div",
+            "column_selected": "//div[@class='dialog__border']//th[@class='table__header__select']//div[@class='ui fitted checkbox checked']",
+            "column_deselected": "//div[@class='dialog__border']//th[@class='table__header__select']//div[@class='ui fitted checkbox']",
+            "Case ID": "//div[text()='Case ID']",
+            "Case": "//tr[@data-column='repository_cases:name']",
+            "Description": "//tr[@data-column='repository_cases:custom_description']",
+            "Updated at": "//tr[@data-column='repository_cases:updated_at']",
+            "Configurations": "//tr[@data-column='repository_cases:configs']",
+            "Created at": "//tr[@data-column='repository_cases:created_at']",
+            "Created by": "//tr[@data-column='repository_cases:created_by']",
+            "Estimate": "//tr[@data-column='repository_cases:estimate']",
+            "Expected": "//tr[@data-column='repository_cases:custom_expected']",
+            "Folder": "//tr[@data-column='repository_cases:folder_id']",
+            "Forecast": "//tr[@data-column='repository_cases:forcecast']",
+            "Issues": "//tr[@data-column='repository_cases:issues']",
+            "Preconditions": "//tr[@data-column='repository_cases:custom_preconditions']",
+            "Priority": "//tr[@data-column='repository_cases:custom_priority']",
+            "State": "//tr[@data-column='repository_cases:state_id']",
+            "Status (latest)": "//tr[@data-column='repository_cases:status_id']",
+            "Status date": "//tr[@data-column='repository_cases:status_at']",
+            "Steps (Expected)": "//tr[@data-column='repository_cases:custom_steps.text3']",
+            "Steps (Step)": "//tr[@data-column='repository_cases:custom_steps.text1']",
+            "TABLE": "//div[@class='dialog__border']//table[@data-target='components--table.table']",
+            "Tags": "//tr[@data-column='repository_cases:tags']",
+            "Template": "//tr[@data-column='repository_cases:template_id']",
+            "Updated by": "//tr[@data-column='repository_cases:updated_by']",
+            "EXPORT_BUTTON": "//div[@class='dialog__border']//button[@class='ui button primary']",
+            "ADDITIONAL_PROJECT_DETAILS": "//div[@class='dialog__border']//div[@class='repos-csv-export-dialog__options']//label",
+            "ADDITIONAL_PROJECT_DETAILS_CHECKED": "//div[@class='ui checkbox checked']",
+            "Don't Sync with Jama": "//tr[@data-column='repository_cases:custom_sy']//td[1]//div",
+            "Safety": "//tr[@data-column='repository_cases:custom_safety']//td[1]//div"
+
+        }
+    }
+}
