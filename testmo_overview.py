@@ -107,7 +107,7 @@ class SafetyFilter(FilterBase):
 		if 'Safety' not in dataframe.columns:
 			return dataframe
 
-		result = dataframe[~dataframe['Safety'] == True]
+		result = dataframe[~dataframe['Safety'].isin({'No'})]
 		return result
 
 
@@ -118,7 +118,7 @@ class RemoveRetiredAndRejected(FilterBase):
 
 	@classmethod
 	def name(cls):
-		return 'not_retired_or_rejected'
+		return 'relevantTests'
 
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
@@ -220,6 +220,22 @@ def display_choices(choices: Iterable[Any], text_key: str = None, index_key: str
 	Display a list of choices (as dicts) in as many columns as will fit in the terminal.
 	Expects a list of dicts with keys 'index' (for numbering) and 'name' (for text).
 	"""
+	def _text_from(_entry, _key):
+		if text_key is None:
+			return limiter(_entry)
+		elif callable(text_key):
+			return limiter(text_key(_entry))
+		else:
+			return limiter(_entry[_key])
+
+	def _index_from(_entry, _key):
+		if index_key is None:
+			return str(_key)
+		elif callable(index_key):
+			return index_key(_entry)
+		else:
+			return _entry[_key]
+
 	if not choices:
 		print("No choices available.")
 		return
@@ -228,18 +244,22 @@ def display_choices(choices: Iterable[Any], text_key: str = None, index_key: str
 	try:
 		columns = shutil.get_terminal_size().columns
 	except Exception:
-		columns = 80    # Fallback
+		columns = 80
 
-	if columns == 80:   # ensure min. 2 columns
-		columns = 120
+	if columns < 120:
+		columns = 120    # Fallback: 2 columns
 
 	# Build the display strings using 'index' and 'name'
-	if text_key is None:
-		indexed_choices = [f"{str(i).rjust(4)}. {limiter(item)}" for i, item in enumerate(choices, 1)]
-	elif index_key is not None:
-		indexed_choices = [f"{str(item[index_key]).rjust(4)}. {limiter(item[text_key])}" for item in choices]
-	else:
-		indexed_choices = [f"{str(i).rjust(4)}. {limiter(item[text_key])}" for i, item in enumerate(choices, 1)]
+	indexed_choices = [
+		f"{_index_from(item, i if index_key is None else index_key).rjust(4)}. {_text_from(item, text_key)}"
+		for i, item in enumerate(choices, 1)
+	]
+	# if text_key is None:
+	# 	indexed_choices = [f"{str(i).rjust(4)}. {limiter(item)}" for i, item in enumerate(choices, 1)]
+	# elif index_key is not None:
+	# 	indexed_choices = [f"{str(item[index_key]).rjust(4)}. {limiter(item[text_key])}" for item in choices]
+	# else:
+	# 	indexed_choices = [f"{str(i).rjust(4)}. {limiter(item[text_key])}" for i, item in enumerate(choices, 1)]
 
 	# Find the max length of each entry
 	max_len = max(len(item) for item in indexed_choices)
@@ -332,6 +352,8 @@ def update_statistics(stats, test_result: str):
 		case _:
 			stats['other'] += 1
 
+	stats['untested'] -= 1
+
 
 def testrun_is_active(test_run: testmo_project_run_reply.Model) -> bool:
 	result = test_run.is_started and not test_run.is_closed
@@ -392,14 +414,6 @@ def table_to_sheet(
 						tracing_required.add(case_id)
 					case _:
 						update_statistics(stats, cell.value)
-					# case "Passed":
-					# 	stats['passed'] += 1
-					# case "Failed":
-					# 	stats['failed'] += 1
-					# case "Blocked" | "Skipped" | "Retest":
-					# 	tracing_required.add(case_id)
-					# case _:
-					# 	stats['other'] += 1
 
 		return tracing_required
 
@@ -538,7 +552,7 @@ def table_to_sheet(
 		pass
 
 	############### MAIN FUNCTION BODY ####################
-	stats = dict_from(total=0, passed=0, failed=0, other=0, not_in_project=0)
+	stats = dict_from(total=0, passed=0, failed=0, other=0, untested=0)
 
 	# ------ obtain repository csv ------
 	event_handler.csv_read_started(locals())
@@ -567,7 +581,7 @@ def table_to_sheet(
 		testmo_project_runs_request(project_info.id, base_request=testmo_request),
 		convert_to=testmo_project_run_reply.from_data
 	)
-	event_handler.test_runs_collected(locals())
+	number_of_runs = event_handler.test_runs_collected(locals())
 
 	# number_of_runs == 0 -> active runs, -1 -> all runs, > 0 -> last N runs
 	total_run_count = len(test_runs)
@@ -762,7 +776,7 @@ class StdEventHandler(ApplicationEventHandler):
 		sys.exit(1)
 
 	def case_id_not_in_project_map(self, kwargs):
-		kwargs['stats']['not_in_project'] += 1
+		# kwargs['stats']['not_in_project'] += 1
 		pass
 
 
@@ -876,7 +890,22 @@ class InterActiveMode(StdEventHandler):
 
 		kwargs['table_cleared'][0] = table
 		kwargs['stats']['total'] = len(table)
+		kwargs['stats']['untested'] = len(table)
 		return filter_names
+
+	def test_runs_collected(self, kwargs):
+		run_choices = {'-1': 'all runs', '0': 'active runs', '<Number>': 'max. last runs'}
+		display_choices(
+			run_choices,
+			index_key=lambda entry: entry,
+			text_key=lambda entry: run_choices[entry]
+		)
+		runs_description = ask_for_input('Which runs to include?', preset='0')
+		try:
+			return int(runs_description)
+		except TypeError:
+			print('Invalid input - collecting all runs.')
+			return -1
 
 
 class StatusMessage(ApplicationEventHandler):
@@ -903,7 +932,7 @@ class StatusMessage(ApplicationEventHandler):
 		print(f'\nProcessing project {kwargs["project_name"]}')
 
 	def collecting_test_runs(self, kwargs):
-		print('Collecting test runs... ', end='')
+		print('Collecting test runs... ')
 
 	def test_runs_collected(self, kwargs):
 		print(f'{len(kwargs["test_runs"])} runs found.')
@@ -1066,7 +1095,7 @@ if __name__ == '__main__':
 		parser.add_argument("-tf", "--testmo_additional_fields", type=str, default=[], help="")
 		parser.add_argument(
 			"-cf", "--case_filter", type=str,
-			default='not_retired_or_rejected',
+			default='relevantTests',
 			help=f"Filter to apply - available: {','.join(FilterRegistry.all_filters())} (default)"
 		)
 		parser.add_argument(

@@ -103,3 +103,4 @@ store/*.json
 
 # private logger config
 .logger_config.json
+testmo_config.json
