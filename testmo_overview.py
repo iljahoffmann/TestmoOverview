@@ -9,6 +9,7 @@ from datetime import datetime
 import subprocess
 
 import pandas
+
 # import readline
 from prompt_toolkit import prompt
 import openpyxl
@@ -26,16 +27,29 @@ from tqdm import tqdm
 from lib import helper_functions
 from lib import selenium_driver_functions
 from lib.testmo_functions import download_fields_and_csv, login_to_testmo
-from lib.testmo_access import testmo, testmo_collect, testmo_project_runs_request, testmo_project_run_results_request, \
-	testmo_result_colors_by_code, testmo_result_status_names, testmo_result_status, testmo_config, testmo_result_colors,\
-	testmo_config_file
+from lib.testmo_access import (
+	testmo,
+	testmo_collect,
+	testmo_project_runs_request,
+	testmo_project_run_results_request,
+	testmo_result_colors_by_code,
+	testmo_result_status_names,
+	testmo_result_status,
+	testmo_config,
+	testmo_result_colors,
+	testmo_config_file,
+)
 from lib.rest_request import RestRequest
 from lib.json_cursor import JsonCursor
 from lib.dict_util import dict_from
 from lib.pandas_dataframe_filter import FilterBase, FilterRegistry
 from lib.file_access import restrict_to_owner
 
-from schema import testmo_project_info_reply, testmo_project_run_reply, testmo_project_run_result
+from schema import (
+	testmo_project_info_reply,
+	testmo_project_run_reply,
+	testmo_project_run_result,
+)
 
 
 testmo_request: RestRequest = None
@@ -49,7 +63,7 @@ std_fields = ["Case ID", "Case", "Folder", "State", "Status (latest)"]
 class RemoveDeletedFilter(FilterBase):
 	@classmethod
 	def description(cls) -> str:
-		return 'not deleted'
+		return "not deleted"
 
 	@classmethod
 	def name(cls):
@@ -58,18 +72,18 @@ class RemoveDeletedFilter(FilterBase):
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
 		"""Exclude if folder name begins with '(Deleted)'"""
-		result = dataframe[~dataframe['Folder'].str.startswith('(Deleted)')]
+		result = dataframe[~dataframe["Folder"].str.startswith("(Deleted)")]
 		return result
 
 
 class NoFilter(FilterBase):
 	@classmethod
 	def description(cls) -> str:
-		return 'No filter'
+		return "No filter"
 
 	@classmethod
 	def name(cls):
-		return 'none'
+		return "none"
 
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
@@ -79,42 +93,42 @@ class NoFilter(FilterBase):
 class ActiveFilter(FilterBase):
 	@classmethod
 	def description(cls) -> str:
-		return 'State = Active'
+		return "State = Active"
 
 	@classmethod
 	def name(cls):
-		return 'active'
+		return "active"
 
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
 		"""Include if state is 'Active'"""
-		result = dataframe[dataframe['State'] == 'Active']
+		result = dataframe[dataframe["State"] == "Active"]
 		return result
 
 
 class SafetyFilter(FilterBase):
 	@classmethod
 	def description(cls) -> str:
-		return 'Safety = True'
+		return "Safety = Yes"
 
 	@classmethod
 	def name(cls):
-		return 'safety'
+		return "safety"
 
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
-		"""Include if safety is present and True"""
-		if 'Safety' not in dataframe.columns:
+		"""Include if safety is present and Yes"""
+		if "Safety" not in dataframe.columns:
 			return dataframe
 
-		result = dataframe[~dataframe['Safety'].isin({'No'})]
+		result = dataframe[dataframe["Safety"].isin({"Yes"})]
 		return result
 
 
 class RemoveRetiredAndRejected(FilterBase):
 	@classmethod
 	def description(cls) -> str:
-		return 'State \u2260 Retired,Rejected'
+		return "State \u2260 Retired,Rejected"
 
 	@classmethod
 	def name(cls):
@@ -123,10 +137,12 @@ class RemoveRetiredAndRejected(FilterBase):
 	@classmethod
 	def apply_to(cls, dataframe: DataFrame) -> DataFrame:
 		"""Include if state is 'Active'"""
-		result = dataframe[~dataframe['State'].isin({'Retired', 'Rejected'})]
+		result = dataframe[~dataframe["State"].isin({"Retired", "Rejected"})]
 		return result
 
+
 # ------- End Filter Definitions -------
+
 
 def get_filters(filter_description: str):
 	def _get_filter_name(name):
@@ -137,7 +153,7 @@ def get_filters(filter_description: str):
 
 		available_filters = [_ for _ in all_filters]
 		if tmp is not None and tmp >= 1 and tmp <= len(available_filters):
-			filter_name = available_filters[tmp-1]
+			filter_name = available_filters[tmp - 1]
 		else:
 			filter_name = name
 
@@ -161,15 +177,15 @@ def open_with_default_app(filename):
 	If unsupported, prints a notification.
 	"""
 	try:
-		if sys.platform.startswith('win'):
+		if sys.platform.startswith("win"):
 			# Windows
 			os.startfile(filename)
-		elif sys.platform == 'darwin':
+		elif sys.platform == "darwin":
 			# macOS
-			subprocess.run(['open', filename], check=True)
-		elif sys.platform.startswith('linux'):
+			subprocess.run(["open", filename], check=True)
+		elif sys.platform.startswith("linux"):
 			# Most desktop Linux distros
-			subprocess.run(['xdg-open', filename], check=True)
+			subprocess.run(["xdg-open", filename], check=True)
 		else:
 			print(f"No known method to open files for OS: {sys.platform}")
 	except Exception as e:
@@ -190,25 +206,29 @@ def is_method_overridden(obj, method_name, base_class):
 		return False  # Method doesn't exist somewhere
 
 	# Unwrap if necessary
-	sub_func = getattr(sub_method, '__func__', sub_method)
-	base_func = getattr(base_method, '__func__', base_method)
+	sub_func = getattr(sub_method, "__func__", sub_method)
+	base_func = getattr(base_method, "__func__", base_method)
 	return sub_func is not base_func
 
 
 def request_setup(testmo_url: str, testmo_token: str):
 	"""Prepare RestRequests"""
 	global testmo_request, testmo_projects_request
-	testmo_request = testmo if testmo is not None and testmo_token is None else RestRequest(
-		base_url=testmo_url,
-		headers={
-			'accept': 'application/json',
-			'Authorization': f'Bearer {testmo_token}'
-		}
+	testmo_request = (
+		testmo
+		if testmo is not None and testmo_token is None
+		else RestRequest(
+			base_url=testmo_url,
+			headers={
+				"accept": "application/json",
+				"Authorization": f"Bearer {testmo_token}",
+			},
+		)
 	)
 	if testmo_url is not None:
 		testmo_request.modify(base_url=testmo_url)
 
-	testmo_projects_request = testmo_request.copy(endpoint='projects')
+	testmo_projects_request = testmo_request.copy(endpoint="projects")
 
 
 def keep_text(text):
@@ -254,12 +274,6 @@ def display_choices(choices: Iterable[Any], text_key: str = None, index_key: str
 		f"{_index_from(item, i if index_key is None else index_key).rjust(4)}. {_text_from(item, text_key)}"
 		for i, item in enumerate(choices, 1)
 	]
-	# if text_key is None:
-	# 	indexed_choices = [f"{str(i).rjust(4)}. {limiter(item)}" for i, item in enumerate(choices, 1)]
-	# elif index_key is not None:
-	# 	indexed_choices = [f"{str(item[index_key]).rjust(4)}. {limiter(item[text_key])}" for item in choices]
-	# else:
-	# 	indexed_choices = [f"{str(i).rjust(4)}. {limiter(item[text_key])}" for i, item in enumerate(choices, 1)]
 
 	# Find the max length of each entry
 	max_len = max(len(item) for item in indexed_choices)
@@ -284,16 +298,16 @@ def display_choices(choices: Iterable[Any], text_key: str = None, index_key: str
 		print(line)
 
 
-def ask_for_input(prompt_str: str, preset: str = ''):
+def ask_for_input(prompt_str: str, preset: str = ""):
 	"""
 	Ask for user input.
 
 	Args:
-		prompt (str): the user prompt
-		preset (str): preset value for the user input
+			prompt (str): the user prompt
+			preset (str): preset value for the user input
 
 	Returns:
-		(str): the user input
+			(str): the user input
 	"""
 	try:
 		user_input = prompt(prompt_str + ": ", default=preset)
@@ -315,17 +329,24 @@ def load_xpaths():
 
 def get_project_mapping():
 	projects = testmo_collect(testmo_projects_request)
-	result = [{'id': str(p['id']), 'name': p['name']} for p in sorted(projects, key=lambda e: e['name'])]
+	result = [
+		{"id": str(p["id"]), "name": p["name"]}
+		for p in sorted(projects, key=lambda e: e["name"])
+	]
 	return result
 
 
 def get_project_info(project_name: str) -> testmo_project_info_reply.Result:
 	testmo_projects = testmo_collect(testmo_projects_request)
 	project_info = JsonCursor(testmo_projects).search(
-		lambda e: isinstance(e.node, dict) and
-			  (e.node.get('name') == project_name or e.node.get('id') == project_name)
+		lambda e: isinstance(e.node, dict)
+		          and (e.node.get("name") == project_name or e.node.get("id") == project_name)
 	)
-	return testmo_project_info_reply.result_from_data(project_info.node) if project_info is not None else None
+	return (
+		testmo_project_info_reply.result_from_data(project_info.node)
+		if project_info is not None
+		else None
+	)
 
 
 def autofit_column_widths(ws, min_column_width=18):
@@ -346,11 +367,11 @@ def autofit_column_widths(ws, min_column_width=18):
 def update_statistics(stats, test_result: str):
 	match test_result:
 		case "Passed":
-			stats['passed'] += 1
+			stats["passed"] += 1
 		case "Failed":
-			stats['failed'] += 1
+			stats["failed"] += 1
 		case _:
-			stats['other'] += 1
+			stats["other"] += 1
 
 	stats['untested'] -= 1
 
@@ -362,22 +383,23 @@ def testrun_is_active(test_run: testmo_project_run_reply.Model) -> bool:
 
 def table_to_sheet(
 		project_info: testmo_project_info_reply.Result,
-		csv_path:str,
+		csv_path: str,
 		additional_columns,
 		case_filter,
 		number_of_runs,
-		event_handler: "ApplicationEventHandler"
+		event_handler: "ApplicationEventHandler",
 ):
 	"""
 	Main conversion repository table => Excel sheet
 	"""
+
 	def _create_sheet_columns(_sheet, _columns):
 		_latest_state_column = -1
 		for i, column in enumerate(_columns, table_start[1]):
 			cell = _sheet.cell(row=table_start[0], column=i)
 			cell.value = column
 			cell.font = bold_font
-			if column == 'Status (latest)':
+			if column == "Status (latest)":
 				_latest_state_column = i
 		return _latest_state_column
 
@@ -386,8 +408,8 @@ def table_to_sheet(
 		tracing_required = set()
 		for index, _row in _table.iterrows():
 			# for all rows ...
-			row = table_start[0] + 1 + index    # first row are column names
-			case_id = _table.iloc[index]['Case ID']
+			row = table_start[0] + 1 + index  # first row are column names
+			case_id = _table.iloc[index]["Case ID"]
 			row_by_case_id[case_id] = row
 			for col, entry in enumerate(_column_names, table_start[1]):
 				# ... process each column
@@ -398,14 +420,18 @@ def table_to_sheet(
 					cell.value = "--"
 				cell.alignment = cell_alignmnent_left
 
-				if entry != 'Status (latest)':
+				if entry != "Status (latest)":
 					continue
 
 				# special case for latest status: coloring, statistics and tracing of blocked, skipped and retest
 				try:
 					case_color = testmo_result_colors.__dict__[cell.value]
 					if case_color is not None:
-						cell.fill = PatternFill(start_color=case_color, end_color=case_color, fill_type="solid")
+						cell.fill = PatternFill(
+							start_color=case_color,
+							end_color=case_color,
+							fill_type="solid",
+						)
 				except Exception:
 					pass
 
@@ -418,21 +444,23 @@ def table_to_sheet(
 		return tracing_required
 
 	def _insert_test_run_results(
-		_sheet,
-		_table,
-		_test_run: testmo_project_run_reply.Model,
-		_run_index: int,
-		_column_offset: int,
-		_traced_cases_in_runs
+			_sheet,
+			_table,
+			_test_run: testmo_project_run_reply.Model,
+			_run_index: int,
+			_column_offset: int,
+			_traced_cases_in_runs,
 	):
 		nonlocal row_by_case_id, stats, traced_cases
 		# ------ load test data and prepare insert ------
 		test_cases = testmo_collect(
-			testmo_project_run_results_request(_test_run.id, base_request=testmo_request),
-			convert_to=testmo_project_run_result.from_data
+			testmo_project_run_results_request(
+				_test_run.id, base_request=testmo_request
+			),
+			convert_to=testmo_project_run_result.from_data,
 		)
 		run_column_index = runs_start[1] + _run_index - _column_offset
-		run_title_cell =  _sheet.cell(row=table_start[0], column=run_column_index)
+		run_title_cell = _sheet.cell(row=table_start[0], column=run_column_index)
 		run_title_cell.value = _test_run.name
 		run_title_cell.font = bold_font
 		# last_change = {}
@@ -469,37 +497,39 @@ def table_to_sheet(
 			cell = _sheet.cell(row=case_index_in_sheet, column=run_column_index)
 			cell.value = case_text
 			if case_color is not None:
-				cell.fill = PatternFill(start_color=case_color, end_color=case_color, fill_type="solid")
+				cell.fill = PatternFill(
+					start_color=case_color, end_color=case_color, fill_type="solid"
+				)
 		pass
 
 	def _percentage(_stats, field):
-		total = _stats['total']
+		total = _stats["total"]
 		if total == 0:
-			return '--'
-		percent = 100.0 * _stats[field]/total
-		return '%.2f' % percent
+			return "--"
+		percent = 100.0 * _stats[field] / total
+		return "%.2f" % percent
 
 	def _filter_description() -> str:
 		filters = get_filters(case_filter)
 		# filter_class = FilterRegistry.get_filter(case_filter)
 		if filters is None or len(filters) == 0:
-			return '(no filter)'
+			return "(no filter)"
 		else:
 			return f'({" | ".join([f.description() for f in filters.values()])})'
 
 	def _insert_header(_sheet, _stats):
 		# Insert header
-		logo = Image('Files/murr_logo.png')
-		logo.width = int(logo.width/2)
-		logo.height = int(logo.height/2)
+		logo = Image("Files/murr_logo.png")
+		logo.width = int(logo.width / 2)
+		logo.height = int(logo.height / 2)
 		_sheet.row_dimensions[1].height = logo.height
-		_sheet.column_dimensions['A'].width = 30
-		_sheet.add_image(logo, 'A1')
-		_sheet.merge_cells('B1:D1')
+		_sheet.column_dimensions["A"].width = 30
+		_sheet.add_image(logo, "A1")
+		_sheet.merge_cells("B1:D1")
 		filter_text = _filter_description()
-		_sheet['B1'] = f'Test Overview {project_info.name} {filter_text}'
-		_sheet['B1'].font = Font(name='Calibri', size=20, bold=True, color='000000')
-		_sheet['B1'].alignment = Alignment(horizontal='center', vertical='center')
+		_sheet["B1"] = f"Test Overview {project_info.name} {filter_text}"
+		_sheet["B1"].font = Font(name="Calibri", size=20, bold=True, color="000000")
+		_sheet["B1"].alignment = Alignment(horizontal="center", vertical="center")
 
 	def _insert_statistics(_sheet, _stats):
 		# Insert Stats
@@ -509,23 +539,28 @@ def table_to_sheet(
 			kcell = _sheet.cell(row=i, column=start_column)
 			kcell.value = column
 			kcell.font = bold_font
-			vcell = _sheet.cell(row=i, column=start_column+1)
+			vcell = _sheet.cell(row=i, column=start_column + 1)
 			if i == start_column:
 				vcell.value = _stats[column]
 			else:
-				vcell.value = f'{_stats[column]} / {_percentage(_stats, column)}%'
+				vcell.value = f"{_stats[column]} / {_percentage(_stats, column)}%"
 			vcell.alignment = cell_alignmnent_left
 		pass
 
-	def _trace_inconclusive_entries(_sheet, _stats, _traced_cases, _traced_cases_in_runs):
+	def _trace_inconclusive_entries(
+			_sheet, _stats, _traced_cases, _traced_cases_in_runs
+	):
 		nonlocal row_by_case_id, latest_state_column
 
-		traced_states = {testmo_result_status.Blocked, testmo_result_status.Skipped, testmo_result_status.Retest}
+		traced_states = {
+			testmo_result_status.Blocked,
+			testmo_result_status.Skipped,
+			testmo_result_status.Retest,
+		}
 		for _case_id in _traced_cases:
 			_cases = _traced_cases_in_runs.get(_case_id)
 			_case_state = None
 			if _cases is not None:
-				# continue
 				for _case in _cases:
 					if _case.status_id in traced_states:
 						continue
@@ -546,10 +581,13 @@ def table_to_sheet(
 				_cell.value = testmo_result_status_names[_case_state]
 				case_color = testmo_result_colors.__dict__[_cell.value]
 				if case_color is not None:
-					_cell.fill = PatternFill(start_color=case_color, end_color=case_color, fill_type="solid")
+					_cell.fill = PatternFill(
+						start_color=case_color, end_color=case_color, fill_type="solid"
+					)
 				else:
 					_cell.fill = PatternFill()
 		pass
+
 
 	############### MAIN FUNCTION BODY ####################
 	stats = dict_from(total=0, passed=0, failed=0, other=0, untested=0)
@@ -557,15 +595,17 @@ def table_to_sheet(
 	# ------ obtain repository csv ------
 	event_handler.csv_read_started(locals())
 	table_raw = pandas.read_csv(csv_path)
-	table_cleared = [RemoveDeletedFilter.apply_to(table_raw)]       # deleted folders are always removed
+	table_cleared = [
+		RemoveDeletedFilter.apply_to(table_raw)
+	]  # deleted folders are always removed
 	case_filter = event_handler.csv_read_complete(locals())
-	table = table_cleared[0].sort_values(by=['Folder', 'Case']).reset_index(drop=True)
+	table = table_cleared[0].sort_values(by=["Folder", "Case"]).reset_index(drop=True)
 
 	# ------ prepare excel sheet ------
 	event_handler.sheet_setup_started(locals())
 	excel_workbook = openpyxl.Workbook()
 	sheet = excel_workbook.active
-	sheet.title = f'{project_info.name} Overview'
+	sheet.title = f"{project_info.name} Overview"
 	sheet_column_names = [*std_fields, *additional_columns]
 
 	table_start = (9, 1)
@@ -596,21 +636,23 @@ def table_to_sheet(
 	traced_cases_in_runs = {}
 	effective_run_index = -1
 	for run_index, test_run in enumerate(sorted(test_runs, key=lambda r: r.created_at)):
-		if number_of_runs == 0:             # only active runs
+		if number_of_runs == 0:  # only active runs
 			if testrun_is_active(test_run):
 				effective_run_index += 1
 			else:
 				continue
-		elif number_of_runs > 0:            # given number of runs
+		elif number_of_runs > 0:  # given number of runs
 			if run_index < skipped_runs:
 				continue
 			else:
 				effective_run_index = run_index
-		else:                               # all runs
+		else:  # all runs
 			effective_run_index = run_index
 
 		event_handler.test_run_processing_started(locals())
-		_insert_test_run_results(sheet, table, test_run, effective_run_index, offset, traced_cases_in_runs)
+		_insert_test_run_results(
+			sheet, table, test_run, effective_run_index, offset, traced_cases_in_runs
+		)
 		event_handler.test_run_processing_complete(locals())
 
 	# ------ trace last state for blocked and skipped last states ------
@@ -625,23 +667,23 @@ def table_to_sheet(
 
 	# ------ save and launch viewer ------
 	event_handler.saving_sheet(locals())
-	excel_filename = os.path.join('Files', f'{project_info.name}.xlsx')
+	excel_filename = os.path.join("Files", f"{project_info.name}.xlsx")
 	excel_workbook.save(excel_filename)
 	event_handler.launching_viewer(locals())
 	open_with_default_app(excel_filename)
 
 
 def extract_field_names(html):
-	soup = BeautifulSoup(html, 'html.parser')
+	soup = BeautifulSoup(html, "html.parser")
 	field_names = []
 
 	# Find all relevant td tags (those with the target class)
-	for td in soup.find_all('td', class_="table__field__avatar-text"):
+	for td in soup.find_all("td", class_="table__field__avatar-text"):
 		# The actual field name is the div after the .avatar div
-		avatar_div = td.find('div', class_="avatar")
+		avatar_div = td.find("div", class_="avatar")
 		if avatar_div:
 			# Find the next div after avatar_div
-			next_div = avatar_div.find_next_sibling('div')
+			next_div = avatar_div.find_next_sibling("div")
 			if next_div and next_div.text.strip():
 				field_names.append(next_div.text.strip())
 	return field_names
@@ -661,6 +703,7 @@ def split_input(line):
 
 class ApplicationEventHandler:
 	"""All available process events base class. Attention: only concrete handlers will get called."""
+
 	def application_setup(self, kwargs):
 		pass
 
@@ -742,12 +785,13 @@ class HandlerChain(ApplicationEventHandler):
 	Create a chain of ApplicationEventHandlers, dispatching method calls to them in order.
 	*** ATTENTION: overrides __getattribute__: only HandlerChain.Abort and methods of the handlers can be addressed ***
 	"""
+
 	def __init__(self, *handlers):
 		self.handlers = handlers
 
 	def __getattribute__(self, name: str):
 		def _call_handlers(kwargs):
-			handlers = object.__getattribute__(self, 'handlers')
+			handlers = object.__getattribute__(self, "handlers")
 			result = None
 			for handler in handlers:
 				if not is_method_overridden(handler, name, ApplicationEventHandler):
@@ -762,40 +806,43 @@ class HandlerChain(ApplicationEventHandler):
 					break
 			return result
 
-		if name == 'Abort':
-			return object.__getattribute__(self, 'Abort')
+		if name == "Abort":
+			return object.__getattribute__(self, "Abort")
 
 		return _call_handlers
 
 
 class StdEventHandler(ApplicationEventHandler):
 	"""mode-independent processing"""
-	def project_does_not_exist(self, kwargs):
-		project_name = kwargs['project']
-		print(f"Error: project '{project_name}' not found -- exiting.")
-		sys.exit(1)
-
 	def case_id_not_in_project_map(self, kwargs):
 		# kwargs['stats']['not_in_project'] += 1
 		pass
 
+	def project_does_not_exist(self, kwargs):
+		project_name = kwargs["project"]
+		print(f"Error: project '{project_name}' not found -- exiting.")
+		sys.exit(1)
+
 
 class ApplicationSetup(ApplicationEventHandler):
 	"""Setup strategy -- selects mode strategy"""
-	def application_setup(self, kwargs):
-		args = kwargs['args']
-		request_setup(args['testmo_url'], args['testmo_token'])
 
-		required_fields = ['user', 'password', 'token']
+	def application_setup(self, kwargs):
+		args = kwargs["args"]
+		request_setup(args["testmo_url"], args["testmo_token"])
+
+		required_fields = ["user", "password", "token"]
 		for field in required_fields:
-			arg_field = f'testmo_{field}'
+			arg_field = f"testmo_{field}"
 			if args[arg_field] is None:
 				if testmo_config is None:
-					raise ValueError(f'{arg_field} is required but neither provided in config not as parameter')
+					raise ValueError(
+						f"{arg_field} is required but neither provided in config not as parameter"
+					)
 				else:
 					args[arg_field] = testmo_config[field]
 
-		kwargs['event_handler'][0] = HandlerChain(InterActiveMode(), StatusMessage())
+		kwargs["event_handler"][0] = HandlerChain(InterActiveMode(), StatusMessage())
 		pass
 
 
@@ -806,34 +853,35 @@ class InterActiveMode(StdEventHandler):
 
 		def _get_project_name(name):
 			for entry in project_mapping:
-				if entry['id'] == name:
-					return entry['name']
+				if entry["id"] == name:
+					return entry["name"]
 
 			try:
 				tmp = int(name)
 			except Exception:
 				return name
 
-			raise ValueError(f'no such project ID: {name}')
+			raise ValueError(f"no such project ID: {name}")
 
 		def _normalize_project(line):
 			entries = split_input(line)
 			result = [_get_project_name(e) for e in entries]
 			return result
 
-		args = kwargs['args']
-		project = args['project_name']
+		args = kwargs["args"]
+		project = args["project_name"]
 		project_mapping = get_project_mapping()
 
 		if project is None:
-			display_choices(project_mapping, index_key='id', text_key='name')
-			project = ask_for_input('Enter one or more projects')
+			display_choices(project_mapping, index_key="id", text_key="name")
+			project = ask_for_input("Enter one or more projects")
 
-		args['project_name'] = _normalize_project(project)
+		args["project_name"] = _normalize_project(project)
 		pass
 
 	def csv_download_fields_received(self, kwargs):
 		"""gather available fields in csv, let the user chose and handover selection to download co-routine"""
+
 		def _get_field_name(name):
 			try:
 				tmp = int(name)
@@ -842,7 +890,7 @@ class InterActiveMode(StdEventHandler):
 				tmp = None
 
 			if tmp is not None and tmp >= 1 and tmp < len(fields):
-				_result = fields[tmp-1]
+				_result = fields[tmp - 1]
 			else:
 				_result = name
 
@@ -855,18 +903,18 @@ class InterActiveMode(StdEventHandler):
 			result = [_get_field_name(e) for e in entries]
 			return result
 
-		xpaths = kwargs['download_args']['xpaths_dict']
-		xpaths_export_entries = xpaths['TESTMO_REPOSITORY_PAGE']['EXPORT_CSV_WINDOW']
-		generator = kwargs['csv_generator']
-		if len(kwargs['testmo_additional_fields']) > 0:
-			additional_fields = kwargs['testmo_additional_fields']
+		xpaths = kwargs["download_args"]["xpaths_dict"]
+		xpaths_export_entries = xpaths["TESTMO_REPOSITORY_PAGE"]["EXPORT_CSV_WINDOW"]
+		generator = kwargs["csv_generator"]
+		if len(kwargs["testmo_additional_fields"]) > 0:
+			additional_fields = kwargs["testmo_additional_fields"]
 		else:
-			fields = [f for f in kwargs['fields'] if f not in std_fields]
+			fields = [f for f in kwargs["fields"] if f not in std_fields]
 			print()
 			display_choices(fields)
-			choice = ask_for_input('Choose additional fields')
+			choice = ask_for_input("Choose additional fields")
 			additional_fields = _normalize_fields(choice)
-			kwargs['testmo_additional_fields'].extend(additional_fields)
+			kwargs["testmo_additional_fields"].extend(additional_fields)
 
 		all_fields = std_fields[:]
 		all_fields.extend(additional_fields)
@@ -877,11 +925,13 @@ class InterActiveMode(StdEventHandler):
 		pass
 
 	def csv_read_complete(self, kwargs):
-		table = kwargs['table_cleared'][0]
-		filter_names = kwargs['case_filter']
+		table = kwargs["table_cleared"][0]
+		filter_names = kwargs["case_filter"]
 
 		display_choices(FilterRegistry.all_filters())
-		filter_names = ask_for_input('Choose filters to apply', preset=filter_names + ' ')
+		filter_names = ask_for_input(
+			"Choose filters to apply", preset=filter_names + " "
+		)
 		filters = get_filters(filter_names)
 
 		for filter_name, frame_filter in filters.items():
@@ -915,18 +965,18 @@ class StatusMessage(ApplicationEventHandler):
 		self.current_case = 0
 
 	def csv_download_started(self, kwargs):
-		print('Scraping project info from Testmo...')
+		print("Scraping project info from Testmo...")
 
 	def csv_read_complete(self, kwargs):
-		filter_names = kwargs['case_filter']
+		filter_names = kwargs["case_filter"]
 		filters = get_filters(filter_names)
 
 		for filter_name, frame_filter in filters.items():
 			if frame_filter is None:
-				print(f"Warning: filter '{filter_name}' is unknown -- filter not applied.")
+				print( f"Warning: filter '{filter_name}' is unknown -- filter not applied.")
 
 	def csv_download_complete(self, kwargs):
-		print('Project info from Testmo received.')
+		print("Project info from Testmo received.")
 
 	def project_started(self, kwargs):
 		print(f'\nProcessing project {kwargs["project_name"]}')
@@ -939,10 +989,12 @@ class StatusMessage(ApplicationEventHandler):
 		pass
 
 	def test_run_processing_started(self, kwargs):
-		self.case_count = kwargs['test_run'].completed_count
+		self.case_count = kwargs["test_run"].completed_count
 		self.current_case = 0
 		self.progress_bar = tqdm(
-			total=self.case_count, desc=f"Run {kwargs['run_index']+1} ({kwargs['test_run'].id})", bar_format='{l_bar}{bar}'
+			total=self.case_count,
+			desc=f"Run {kwargs['run_index']+1} ({kwargs['test_run'].id})",
+			bar_format="{l_bar}{bar}",
 		)
 		pass
 
@@ -956,18 +1008,19 @@ class StatusMessage(ApplicationEventHandler):
 		pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+
 	def selenium_download_csv(
-		event_handler: ApplicationEventHandler,
-		project_name,
-		testmo_gui_url,
-		testmo_user,
-		testmo_password,
-		testmo_url,
-		testmo_token,
-		testmo_additional_fields,
-		project_info,
-		headless = True
+			event_handler: ApplicationEventHandler,
+			project_name,
+			testmo_gui_url,
+			testmo_user,
+			testmo_password,
+			testmo_url,
+			testmo_token,
+			testmo_additional_fields,
+			project_info,
+			headless=True,
 	) -> str:
 		# setup xpaths and table column keys
 		testmo_xpaths = load_xpaths()
@@ -980,10 +1033,16 @@ if __name__ == '__main__':
 
 		# prepare selenium
 		event_handler.selenium_setup(locals())
-		selenium_driver = selenium_driver_functions.setup_driver(project_download_path, headless=headless)
+		selenium_driver = selenium_driver_functions.setup_driver(
+			project_download_path, headless=headless
+		)
 
 		# login to testmo
-		login_args = dict_from(xpath_dict=testmo_xpaths, testmo_email=testmo_user, testmo_password=testmo_password)
+		login_args = dict_from(
+			xpath_dict=testmo_xpaths,
+			testmo_email=testmo_user,
+			testmo_password=testmo_password,
+		)
 		event_handler.testmo_gui_login(locals())
 		login_to_testmo(selenium_driver, **login_args)
 		time.sleep(2)
@@ -995,7 +1054,7 @@ if __name__ == '__main__':
 			testmo_gui_url=testmo_gui_url,
 			download_path=project_download_path,
 			xpaths_dict=testmo_xpaths,
-			overwrite_existing_file=True
+			overwrite_existing_file=True,
 		)
 		event_handler.csv_download_started(locals())
 		# obtain download co-routine ...
@@ -1007,22 +1066,26 @@ if __name__ == '__main__':
 		return download_result
 
 	def process_project(
-		event_handler: ApplicationEventHandler,
-	    project_name,
-	    testmo_gui_url,
-		testmo_user,
-		testmo_password,
-		testmo_url,
-		testmo_token,
-		testmo_additional_fields,
-		case_filter,
-		number_of_runs
+			event_handler: ApplicationEventHandler,
+			project_name,
+			testmo_gui_url,
+			testmo_user,
+			testmo_password,
+			testmo_url,
+			testmo_token,
+			testmo_additional_fields,
+			case_filter,
+			number_of_runs,
 	):
 		request_setup(testmo_url, testmo_token)
 
 		# check project
-		project_file_name = "".join(c for c in project_name if c.isalpha() or c.isdigit() or c == ' ').rstrip().replace(" ", "")
-		download_result = f'Files/{project_file_name}.csv'
+		project_file_name = (
+			"".join(c for c in project_name if c.isalpha() or c.isdigit() or c == " ")
+			.rstrip()
+			.replace(" ", "")
+		)
+		download_result = f"Files/{project_file_name}.csv"
 		should_download_csv = [True]
 
 		project_info = get_project_info(project_name)
@@ -1034,14 +1097,26 @@ if __name__ == '__main__':
 		# download project repository
 		if should_download_csv[0]:
 			download_result = selenium_download_csv(
-				event_handler, project_name, testmo_gui_url, testmo_user, testmo_password,
-				testmo_url, testmo_token, testmo_additional_fields, project_info,
-				headless=True
+				event_handler,
+				project_name,
+				testmo_gui_url,
+				testmo_user,
+				testmo_password,
+				testmo_url,
+				testmo_token,
+				testmo_additional_fields,
+				project_info,
+				headless=True,
 			)
 
 		# create report
 		table_to_sheet(
-			project_info, download_result, testmo_additional_fields, case_filter, number_of_runs, event_handler
+			project_info,
+			download_result,
+			testmo_additional_fields,
+			case_filter,
+			number_of_runs,
+			event_handler,
 		)
 		event_handler.processing_complete(locals())
 		pass
@@ -1050,12 +1125,14 @@ if __name__ == '__main__':
 		if os.path.exists(testmo_config_file):
 			return
 
-		print(f'\nConfiguration file "{testmo_config_file}" not found - Setup required.')
-		print('Please provide your Testmo credentials:')
+		print(
+			f'\nConfiguration file "{testmo_config_file}" not found - Setup required.'
+		)
+		print("Please provide your Testmo credentials:")
 		fields = {
 			"user": "Your Testmo Username",
 			"password": "Your Testmo Password",
-			"token": "Your Testmo API Token"
+			"token": "Your Testmo API Token",
 		}
 
 		template = {
@@ -1063,60 +1140,89 @@ if __name__ == '__main__':
 			"url": "https://murrelektronik.testmo.net/api/v1",
 		}
 		for field in fields:
-			answer = ask_for_input(f'{fields[field]}').strip()
+			answer = ask_for_input(f"{fields[field]}").strip()
 			if len(answer) == 0:
-				print('Configuration aborted.')
+				print("Configuration aborted.")
 				sys.exit(1)
 			template[field] = answer
 
-		with open(testmo_config_file, 'w') as f:
+		with open(testmo_config_file, "w") as f:
 			json.dump(template, f, indent=2)
 
 		restrict_to_owner(testmo_config_file)
-		print('Config created. Restart the program.\n')
+		print("Config created. Restart the program.\n")
 		sys.exit(0)
 
 	def main():
 		startup_check()
 
-		parser = argparse.ArgumentParser(description="Create overview Excelsheets for Testmo-Projects.")
-		parser.add_argument("-pn", "--project_name", type=str, default=None, help="The name of the project")
-		parser.add_argument(
-			"-tg", "--testmo_gui_url", type=str,
-			default="https://murrelektronik.testmo.net", help="Testmo GUI URL"
-		)
-		parser.add_argument("-tn", "--testmo_user", type=str, default=None, help="Testmo GUI user name")
-		parser.add_argument("-tp", "--testmo_password", type=str, default=None, help="Testmo GUI password")
-		parser.add_argument(
-			"-tu", "--testmo_url", type=str,
-			default="https://murrelektronik.testmo.net/api/v1", help="Testmo API URL"
-		)
-		parser.add_argument("-tt", "--testmo_token", type=str, default=None, help="Testmo API token")
-		parser.add_argument("-tf", "--testmo_additional_fields", type=str, default=[], help="")
-		parser.add_argument(
-			"-cf", "--case_filter", type=str,
-			default='relevantTests',
-			help=f"Filter to apply - available: {','.join(FilterRegistry.all_filters())} (default)"
+		parser = argparse.ArgumentParser(
+			description="Create overview Excelsheets for Testmo-Projects."
 		)
 		parser.add_argument(
-			"-nr", "--number_of_runs", type=int,
+			"-pn",
+			"--project_name",
+			type=str,
+			default=None,
+			help="The name of the project",
+		)
+		parser.add_argument(
+			"-tg",
+			"--testmo_gui_url",
+			type=str,
+			default="https://murrelektronik.testmo.net",
+			help="Testmo GUI URL",
+		)
+		parser.add_argument(
+			"-tn", "--testmo_user", type=str, default=None, help="Testmo GUI user name"
+		)
+		parser.add_argument(
+			"-tp",
+			"--testmo_password",
+			type=str,
+			default=None,
+			help="Testmo GUI password",
+		)
+		parser.add_argument(
+			"-tu",
+			"--testmo_url",
+			type=str,
+			default="https://murrelektronik.testmo.net/api/v1",
+			help="Testmo API URL",
+		)
+		parser.add_argument(
+			"-tt", "--testmo_token", type=str, default=None, help="Testmo API token"
+		)
+		parser.add_argument(
+			"-tf", "--testmo_additional_fields", type=str, default=[], help=""
+		)
+		parser.add_argument(
+			"-cf",
+			"--case_filter",
+			type=str,
+			default="not_retired_or_rejected",
+			help=f"Filter to apply - available: {','.join(FilterRegistry.all_filters())} (default)",
+		)
+		parser.add_argument(
+			"-nr",
+			"--number_of_runs",
+			type=int,
 			default=6,
-			help="how many of the last runs to check. Use -1 for all runs."
+			help="how many of the last runs to check. Use -1 for all runs.",
 		)
-		args =  dict(parser.parse_args().__dict__)
+		args = dict(parser.parse_args().__dict__)
 
 		# event_handler = HandlerChain(InterActiveMode())
-		event_handler = [ApplicationSetup()]            # as list to enable modification by the handler
+		event_handler = [
+			ApplicationSetup()
+		]  # as list to enable modification by the handler
 		event_handler[0].application_setup(locals())
 		event_handler[0].application_started(locals())
 
-		projects = args['project_name']
+		projects = args["project_name"]
 		for p in projects:
-			args['project_name'] = p
-			process_project(
-				event_handler[0],
-				**args
-			)
+			args["project_name"] = p
+			process_project(event_handler[0], **args)
 		sys.exit(0)
 
 	main()

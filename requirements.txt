@@ -1,8 +1,10 @@
 pandas
-prompt-tool
+prompt_toolkit
 openpyxl
 beautifulsoup4
 tqdm
 requests
 pillow
 pyinstaller
+selenium
+pydantic
