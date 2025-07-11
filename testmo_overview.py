@@ -1200,7 +1200,7 @@ if __name__ == "__main__":
 			"-cf",
 			"--case_filter",
 			type=str,
-			default="not_retired_or_rejected",
+			default="relevantTests",
 			help=f"Filter to apply - available: {','.join(FilterRegistry.all_filters())} (default)",
 		)
 		parser.add_argument(
