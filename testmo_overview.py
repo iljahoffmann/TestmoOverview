@@ -51,10 +51,12 @@ from schema import (
 	testmo_project_run_result,
 )
 
+EXCEL_MIN_COLUMN_CHARS = 18
+EXCEL_MAX_COLUMN_CHARS = 140
 
 testmo_request: RestRequest = None
 testmo_projects_request: RestRequest = None
-cell_alignmnent_left = Alignment(horizontal="left")
+cell_alignmnent_left = Alignment(horizontal="left", wrapText=True)
 bold_font = Font(bold=True)
 std_fields = ["Case ID", "Case", "Folder", "State", "Status (latest)"]
 
@@ -143,7 +145,6 @@ class RemoveRetiredAndRejected(FilterBase):
 
 # ------- End Filter Definitions -------
 
-
 def get_filters(filter_description: str):
 	def _get_filter_name(name):
 		try:
@@ -205,7 +206,7 @@ def is_method_overridden(obj, method_name, base_class):
 	if sub_method is None or base_method is None:
 		return False  # Method doesn't exist somewhere
 
-	# Unwrap if necessary
+	# Compare the functions - if they differ, the method was overridden
 	sub_func = getattr(sub_method, "__func__", sub_method)
 	base_func = getattr(base_method, "__func__", base_method)
 	return sub_func is not base_func
@@ -349,7 +350,7 @@ def get_project_info(project_name: str) -> testmo_project_info_reply.Result:
 	)
 
 
-def autofit_column_widths(ws, min_column_width=18):
+def autofit_column_widths(ws, min_column_width, max_column_width):
 	for i, column_cells in enumerate(ws.columns, 1):
 		max_length = 0
 		for cell in column_cells:
@@ -360,7 +361,7 @@ def autofit_column_widths(ws, min_column_width=18):
 						max_length = cell_length
 			except Exception:
 				pass
-		adjusted_width = max(max_length + 2, min_column_width)
+		adjusted_width = min(max_column_width + 2,  max(max_length + 2, min_column_width))
 		ws.column_dimensions[get_column_letter(i)].width = adjusted_width
 
 
@@ -661,7 +662,7 @@ def table_to_sheet(
 
 	# ------ insert statistics ------
 	event_handler.inserting_statistics(locals())
-	autofit_column_widths(sheet)
+	autofit_column_widths(sheet, min_column_width=EXCEL_MIN_COLUMN_CHARS, max_column_width=EXCEL_MAX_COLUMN_CHARS)
 	_insert_header(sheet, stats)
 	_insert_statistics(sheet, stats)
 
@@ -1200,7 +1201,7 @@ if __name__ == "__main__":
 			"-cf",
 			"--case_filter",
 			type=str,
-			default="not_retired_or_rejected",
+			default="relevantTests",
 			help=f"Filter to apply - available: {','.join(FilterRegistry.all_filters())} (default)",
 		)
 		parser.add_argument(
